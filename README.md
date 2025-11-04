@@ -1,18 +1,14 @@
 # alpha-forge
-An autonomous alpha research lab: fetch → features → signals → portfolio → walk-forward → telemetry → explain.
 
-## Why
-Maximize real (net) alpha, minimize drawdown, and prove where returns come from.
+**alpha-forge** is an autonomous alpha-research lab — a modular system for feature engineering, signal generation, backtesting, and explainable portfolio analytics.
 
-## What’s inside
-- Truth layer: correct Sharpe/Sortino/alpha, realistic cost model.
-- Alpha Ledger: marginal PnL by feature with decay & IC.
-- Orthogonalization: sector z + optional PCA.
-- Construction: linear ranks + ERC/HRP overlays, vol targeting, constraints.
-- Governance: purging/embargo, anchored OOS, DSR, PBO.
-- Streamlit app: Gross vs Net, Run Registry, Sources of Return.
+## Features
+- Modular data → features → signals → portfolio → backtest → telemetry flow.
+- Streamlit UI with gross vs. net returns and explainability dashboard.
+- Full CI with unit tests.
 
 ## Quickstart
 ```bash
 pip install -e .
 streamlit run app/streamlit_app.py
+```

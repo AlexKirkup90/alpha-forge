@@ -18,8 +18,10 @@ def test_compute_feature_marginals_basic():
     }
 
     ledger = compute_feature_marginals(weights, next_returns)
+    assert isinstance(ledger, list)
     assert len(ledger) == 4
 
+    # Check a specific feature/date row
     first_value = next(
         row
         for row in ledger
@@ -28,6 +30,7 @@ def test_compute_feature_marginals_basic():
     expected_pnl = 0.1 * 0.02
     assert abs(first_value["marginal_pnl"] - expected_pnl) < 1e-9
 
+    # Date-wise totals should match manual sum of feature contributions
     totals = {}
     for row in ledger:
         totals.setdefault(row["date"], 0.0)
@@ -39,7 +42,7 @@ def test_compute_feature_marginals_basic():
         for feature in weights.values():
             weights_for_date = feature.get(date, {})
             for ticker, ret in next_returns[date].items():
-                pnl += weights_for_date.get(ticker, 0.0) * ret
+                pnl += float(weights_for_date.get(ticker, 0.0)) * float(ret)
         manual_totals[date] = pnl
 
     for date, pnl in totals.items():

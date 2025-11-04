@@ -29,8 +29,25 @@ def estimate_costs(
 ) -> tuple[list[CostRow], dict[str, dict[str, float]]]:
     """Estimate per-date trading costs with spread, impact, and fees.
 
-    Returns a tuple of (cost_rows, diagnostics) where diagnostics contains
-    participation levels and violation counts keyed by date.
+    Parameters
+    ----------
+    trades
+        Mapping from date -> {ticker -> shares_traded (signed)}.
+        NOTE: participation is computed as |shares| / ADV per ticker.
+    adv
+        Mapping {ticker -> average daily volume in shares} (must be > 0 to contribute).
+    spreads_bps
+        Mapping {ticker -> bid-ask spread in basis points}.
+    sigma_daily
+        Mapping {ticker -> recent daily volatility (e.g., 20d std of daily returns)}.
+    params
+        Optional overrides: {"p_max": 0.10, "k": 0.7, "fee_bps": 0.0}.
+
+    Returns
+    -------
+    (cost_rows, diagnostics)
+        cost_rows: list of CostRow per date.
+        diagnostics: {"participation": {date: {ticker: p_capped}}, "violations": {date: count}}
     """
 
     if not trades:
@@ -38,7 +55,9 @@ def estimate_costs(
 
     defaults = {"p_max": 0.10, "k": 0.7, "fee_bps": 0.0}
     cfg = {**defaults, **(params or {})}
-    fee_rate = cfg.get("fee_bps", 0.0) / 1e4
+    fee_rate = float(cfg.get("fee_bps", 0.0)) / 1e4
+    p_max = float(cfg.get("p_max", 0.10))
+    k = float(cfg.get("k", 0.7))
 
     cost_rows: list[CostRow] = []
     participation_summary: dict[str, dict[str, float]] = {}
@@ -53,21 +72,22 @@ def estimate_costs(
 
         for ticker, shares in trade_row.items():
             adv_value = float(adv.get(ticker, 0.0))
-            participation_raw = abs(shares)
-            if adv_value > 0:
-                participation_raw = abs(shares) / adv_value
-            else:
-                participation_raw = 0.0
-            if participation_raw > cfg["p_max"] + 1e-12:
+            # participation p = |shares| / ADV (guard ADV=0)
+            p_raw = abs(float(shares)) / adv_value if adv_value > 0.0 else 0.0
+            if p_raw > p_max + 1e-12:
                 violations += 1
-            participation_capped = min(participation_raw, cfg["p_max"])
-            participation_row[ticker] = participation_capped
+            p = p_raw if p_raw < p_max else p_max
+            participation_row[ticker] = p
 
             spread_bps = float(spreads_bps.get(ticker, 0.0))
             sigma = float(sigma_daily.get(ticker, 0.0))
-            c_spread_total += participation_capped * (spread_bps / 1e4)
-            c_impact_total += sigma * cfg["k"] * math.sqrt(participation_capped)
-            c_fees_total += participation_capped * fee_rate
+
+            # Spread cost (return units)
+            c_spread_total += p * (spread_bps / 1e4)
+            # Square-root impact
+            c_impact_total += sigma * k * math.sqrt(p)
+            # Fees/taxes
+            c_fees_total += p * fee_rate
 
         cost_rows.append(
             CostRow(

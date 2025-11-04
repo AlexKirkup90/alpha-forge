@@ -12,6 +12,11 @@ def _is_finite(value: float) -> bool:
 
 
 def _to_series(data: Sequence[float] | Mapping[T, float]) -> tuple[list[T], list[float]]:
+    """Convert a sequence or mapping to aligned (keys, values) lists.
+
+    - For mappings, preserves the mapping's iteration order (assumed deterministic).
+    - For sequences, keys are 0..n-1.
+    """
     if isinstance(data, Mapping):
         keys = list(data.keys())
         values = [float(v) for v in data.values()]
@@ -29,6 +34,7 @@ def _mean(values: Sequence[float]) -> float:
 
 
 def _std(values: Sequence[float]) -> float:
+    """Sample standard deviation (ddof=1). Returns 0.0 for <2 finite obs."""
     finite = [v for v in values if _is_finite(v)]
     if len(finite) < 2:
         return 0.0
@@ -41,19 +47,24 @@ def align_series(
     a: Sequence[float] | Mapping[T, float],
     b: Sequence[float] | Mapping[T, float],
 ) -> tuple[list[float], list[float]]:
-    """Align two return collections by shared keys while dropping non-finite values."""
+    """Align two return collections by shared keys while dropping non-finite values.
+
+    - If inputs are sequences, aligns by positional index.
+    - If inputs are mappings, aligns by intersecting keys.
+    - Non-finite values are dropped.
+    """
     keys_a, values_a = _to_series(a)
     keys_b, values_b = _to_series(b)
     lookup_b = {key: value for key, value in zip(keys_b, values_b)}
     aligned_a: list[float] = []
     aligned_b: list[float] = []
     for key, value_a in zip(keys_a, values_a):
-        value_b = lookup_b.get(key)
-        if value_b is None and key not in lookup_b:
+        if key not in lookup_b:
             continue
+        value_b = lookup_b[key]
         if not (_is_finite(value_a) and _is_finite(value_b)):
             continue
-        aligned_a.append(value_a)
+        aligned_a.append(float(value_a))
         aligned_b.append(float(value_b))
     return aligned_a, aligned_b
 
@@ -118,7 +129,7 @@ def alpha_beta(
     returns: Sequence[float] | Mapping[T, float],
     benchmark: Sequence[float] | Mapping[T, float],
 ) -> tuple[float, float]:
-    """Estimate weekly alpha and beta via simple OLS."""
+    """Estimate weekly alpha and beta via simple OLS (closed-form)."""
     aligned_returns, aligned_bench = align_series(returns, benchmark)
     n = len(aligned_returns)
     if n < 2:
@@ -140,19 +151,39 @@ def deflated_sharpe(
     m: int,
     autocorr: float = 0.0,
 ) -> float:
-    """Approximate the Deflated Sharpe Ratio following López de Prado."""
+    """Approximate the Deflated Sharpe Ratio following López de Prado.
+
+    Parameters
+    ----------
+    observed_sharpe : observed annualized Sharpe ratio
+    n : sample size (number of period returns)
+    m : number of strategies tried (model selection correction)
+    autocorr : lag-1 autocorrelation of returns (approx), range (-1,1)
+
+    Returns
+    -------
+    float : probability-like score in [0,1] increasing with robustness.
+    """
     if m < 1 or n <= 1:
         return math.nan
     if not math.isfinite(observed_sharpe):
         return math.nan
     if abs(autocorr) >= 1:
         return math.nan
+
+    # Effective sample size with simple AR(1) correction
     n_eff = n * (1 - autocorr) / (1 + autocorr)
     if n_eff <= 1:
         return math.nan
+
+    # Standard error of Sharpe under normal iid (approximate)
     se = math.sqrt((1 + 0.5 * observed_sharpe**2) / (n_eff - 1))
+
+    # Multiple testing bias term
     bias = 0.0
     if m > 1:
         bias = se * math.sqrt(2.0 * math.log(m))
+
+    # Z-score and CDF
     z = 0.0 if se == 0 else (observed_sharpe - bias) / se
     return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))

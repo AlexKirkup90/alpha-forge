@@ -17,6 +17,8 @@ def test_sharpe_matches_expected():
     noise = [random.gauss(0.0, 0.02) for _ in range(260)]
     returns = [base + n for n in noise]
     sr = sharpe(returns)
+
+    # Closed-form expectation using sample stats (ddof=1) and weekly annualization
     import statistics
 
     mean_sample = statistics.mean(returns)

@@ -12,6 +12,13 @@ if str(SRC_DIR) not in sys.path:
 
 import streamlit as st
 
+from src.metrics.diagnostics import (
+    breadth,
+    cross_sectional_ic,
+    hit_rate,
+    hhi,
+    quintile_spread,
+)
 from src.telemetry.demo_run import write_demo_run
 
 st.set_page_config(page_title="alpha-forge", layout="wide")
@@ -29,6 +36,20 @@ if st.sidebar.button("Create demo run"):
     st.success(f"Demo run created at: {out_path}")
 
 st.subheader("Run Registry")
+
+with st.expander("🔎 Diagnostics (demo calculation)"):
+    demo_factor = {"AAA": 1.0, "BBB": 0.5, "CCC": -0.2, "DDD": 0.8}
+    demo_next = {"AAA": 0.02, "BBB": 0.01, "CCC": -0.01, "DDD": 0.015}
+    demo_weights = {"AAA": 0.4, "BBB": 0.3, "CCC": 0.2, "DDD": 0.1}
+    st.write(
+        {
+            "IC": cross_sectional_ic(demo_factor, demo_next),
+            "HitRate": hit_rate(demo_factor, demo_next),
+            "Q5-Q1": quintile_spread(demo_factor, demo_next, 4),
+            "Breadth": breadth(demo_weights),
+            "HHI": hhi(demo_weights),
+        }
+    )
 runs_dir = pathlib.Path("runs")
 if runs_dir.exists():
     for day_dir in sorted(runs_dir.glob("*")):

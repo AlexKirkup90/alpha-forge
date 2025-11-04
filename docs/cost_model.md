@@ -18,3 +18,4 @@ Apply per-name per-rebalance, convert to portfolio return impact by weight/turno
 - Flag if p > p_max (violation).
 - Enforce min trade size threshold to avoid dust churn.
 - Log per-trade cost components for diagnostics.
+- Support plain Python mappings/lists for offline execution without pandas.

@@ -22,6 +22,6 @@ Report α (per week) and β. If annualizing α, multiply by 52; keep units expli
 Use López de Prado formulation. Inputs: observed Sharpe, sample size N, number of tried strategies M (model-selection correction), and return autocorrelation ρ (optional).
 
 **Conventions**  
-- Use pandas Series indexed by week-end dates.
-- Drop NaNs by intersection of indices (no forward-fill).
+- Align observations by intersecting shared keys/index values (no forward-fill).  
+- Plain Python sequences or mappings are acceptable inputs so long as ordering is deterministic.  
 - Report units clearly (per-week vs annualized).

@@ -1,60 +1,95 @@
-"""Feature-level marginal PnL computations."""
+"""Feature-level marginal PnL computations using plain Python structures."""
 from __future__ import annotations
 
-from typing import Dict, Iterable, List
-
-import numpy as np
-import pandas as pd
-
-
-def _to_returns_df(next_period_returns: pd.Series | pd.DataFrame) -> pd.DataFrame:
-    if isinstance(next_period_returns, pd.DataFrame):
-        return next_period_returns
-    if next_period_returns.name is None:
-        raise ValueError("next_period_returns Series must have a date index or name")
-    return next_period_returns.to_frame().T
+from typing import Mapping
 
 
 def compute_feature_marginals(
-    weights_by_feature: Dict[str, pd.DataFrame],
-    next_period_returns: pd.Series | pd.DataFrame,
-) -> pd.DataFrame:
-    """Compute marginal PnL contributions for each feature per date."""
-    if not weights_by_feature:
-        return pd.DataFrame(columns=["date", "feature", "delta_weight", "next_ret", "marginal_pnl"])
+    weights_by_feature: Mapping[str, Mapping[str, Mapping[str, float]]],
+    next_period_returns: Mapping[str, Mapping[str, float]],
+) -> list[dict[str, object]]:
+    """Compute marginal PnL contributions for each feature per date.
 
-    returns_df = _to_returns_df(next_period_returns)
+    Parameters
+    ----------
+    weights_by_feature:
+        Mapping from feature name -> date -> ticker -> delta weight attributable to that feature.
+        Example:
+            {
+              "momentum": { "2024-01-05": {"AAPL": 0.01, "MSFT": -0.005}, ... },
+              "revisions": { "2024-01-05": {"AAPL": 0.002, "MSFT": 0.001}, ... }
+            }
+    next_period_returns:
+        Mapping from date -> ticker -> realized return for the subsequent period.
+        Example:
+            { "2024-01-05": {"AAPL": 0.012, "MSFT": -0.004}, ... }
 
-    common_index = returns_df.index
-    common_columns = returns_df.columns
-    for df in weights_by_feature.values():
-        common_index = common_index.intersection(df.index)
-        common_columns = common_columns.intersection(df.columns)
+    Returns
+    -------
+    list of dict:
+        Rows of the form:
+        {
+          "date": <str>,
+          "feature": <str>,
+          "delta_weight": <float>,   # sum of feature-attributed delta weights (across common tickers)
+          "next_ret": <float>,       # marginal return (pnl / gross_exposure) for this feature on that date
+          "marginal_pnl": <float>    # sum_ticker( delta_weight[t] * next_ret[t] )
+        }
+    """
 
-    if common_index.empty or len(common_columns) == 0:
-        return pd.DataFrame(columns=["date", "feature", "delta_weight", "next_ret", "marginal_pnl"])
+    # Fast exits
+    if not weights_by_feature or not next_period_returns:
+        return []
 
-    rows: List[dict[str, object]] = []
-    for feature, weights in weights_by_feature.items():
-        aligned_weights = weights.reindex(index=common_index, columns=common_columns).fillna(0.0)
-        for date in common_index:
-            delta = aligned_weights.loc[date]
-            rets = returns_df.loc[date, common_columns]
-            pnl = float((delta * rets).sum())
-            gross_exposure = float(delta.abs().sum())
-            next_ret = float(pnl / gross_exposure) if gross_exposure > 0 else 0.0
+    # Dates common to returns and to every feature's weights
+    common_dates = set(next_period_returns.keys())
+    for feature_weights in weights_by_feature.values():
+        common_dates &= set(feature_weights.keys())
+    if not common_dates:
+        return []
+
+    sorted_dates = sorted(common_dates)
+
+    # Determine tickers common across all features for the overlapping dates
+    common_tickers: set[str] | None = None
+    for feature_weights in weights_by_feature.values():
+        for date in sorted_dates:
+            tickers = set(feature_weights.get(date, {}).keys())
+            if common_tickers is None:
+                common_tickers = set(tickers)
+            else:
+                common_tickers &= tickers
+
+    if not common_tickers:
+        return []
+
+    rows: list[dict[str, object]] = []
+    for date in sorted_dates:
+        date_returns = next_period_returns.get(date, {})
+        for feature_name in sorted(weights_by_feature.keys()):
+            weights_for_date = weights_by_feature[feature_name].get(date, {})
+            pnl = 0.0
+            gross_exposure = 0.0
+
+            # Compute marginal pnl and gross exposure over common tickers
+            for ticker in common_tickers:
+                w = float(weights_for_date.get(ticker, 0.0))
+                r = float(date_returns.get(ticker, 0.0))
+                pnl += w * r
+                gross_exposure += abs(w)
+
+            next_ret = pnl / gross_exposure if gross_exposure > 0.0 else 0.0
+            delta_weight_sum = float(sum(weights_for_date.get(t, 0.0) for t in common_tickers))
+
             rows.append(
                 {
                     "date": date,
-                    "feature": feature,
-                    "delta_weight": float(delta.sum()),
+                    "feature": feature_name,
+                    "delta_weight": delta_weight_sum,
                     "next_ret": next_ret,
                     "marginal_pnl": pnl,
                 }
             )
 
-    result = pd.DataFrame(rows)
-    if not result.empty:
-        result.sort_values(["date", "feature"], inplace=True)
-        result.reset_index(drop=True, inplace=True)
-    return result
+    rows.sort(key=lambda row: (row["date"], row["feature"]))
+    return rows

@@ -1,0 +1,8 @@
+src/metrics/perf.py merge=ours
+src/portfolio/costs.py merge=ours
+src/ledger/alpha_ledger.py merge=ours
+tests/test_metrics.py merge=ours
+tests/test_costs.py merge=ours
+tests/test_alpha_ledger.py merge=ours
+docs/metrics.md merge=ours
+docs/cost_model.md merge=ours

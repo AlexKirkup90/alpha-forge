@@ -1,9 +1,8 @@
 import math
-
-import numpy as np
-import pandas as pd
+import random
 
 from src.metrics.perf import (
+    align_series,
     alpha_beta,
     annualize_mean_std,
     deflated_sharpe,
@@ -13,39 +12,45 @@ from src.metrics.perf import (
 
 
 def test_sharpe_matches_expected():
-    rng = np.random.default_rng(42)
+    random.seed(42)
     base = 0.01
-    noise = rng.normal(0.0, 0.02, size=260)
-    returns = pd.Series(base + noise)
+    noise = [random.gauss(0.0, 0.02) for _ in range(260)]
+    returns = [base + n for n in noise]
     sr = sharpe(returns)
-    expected = base / 0.02 * math.sqrt(52)
-    assert math.isclose(sr, expected, rel_tol=0.15)
+
+    # Closed-form expectation using sample stats (ddof=1) and weekly annualization
+    import statistics
+
+    mean_sample = statistics.mean(returns)
+    std_sample = statistics.stdev(returns)
+    expected = mean_sample / std_sample * math.sqrt(52)
+    assert math.isclose(sr, expected, rel_tol=1e-6)
 
 
 def test_sortino_positive_only_infinite():
-    returns = pd.Series(np.full(20, 0.01))
+    returns = [0.01] * 20
     result = sortino(returns)
     assert math.isinf(result)
 
 
 def test_sortino_mixed_returns():
-    returns = pd.Series([0.01, -0.02, 0.015, -0.01, 0.02])
+    returns = [0.01, -0.02, 0.015, -0.01, 0.02]
     result = sortino(returns)
     assert result > 0
 
 
 def test_alpha_beta_estimation():
-    rng = np.random.default_rng(7)
-    bench = pd.Series(rng.normal(0.0, 0.01, size=200))
-    noise = pd.Series(rng.normal(0.0, 0.005, size=200))
-    strat = 0.001 + 1.2 * bench + noise
+    random.seed(7)
+    bench = [random.gauss(0.0, 0.01) for _ in range(200)]
+    noise = [random.gauss(0.0, 0.005) for _ in range(200)]
+    strat = [0.001 + 1.2 * b + n for b, n in zip(bench, noise)]
     alpha, beta = alpha_beta(strat, bench)
     assert math.isclose(alpha, 0.001, abs_tol=5e-4)
     assert math.isclose(beta, 1.2, rel_tol=0.05)
 
 
 def test_annualize_mean_std_constants():
-    returns = pd.Series(np.full(52, 0.01))
+    returns = [0.01] * 52
     mean_ann, std_ann = annualize_mean_std(returns)
     assert math.isclose(mean_ann, 0.52, rel_tol=1e-6)
     assert math.isclose(std_ann, 0.0, abs_tol=1e-8)
@@ -58,3 +63,11 @@ def test_deflated_sharpe_monotonicity():
     more_trials = deflated_sharpe(sr, n=30, m=100)
     assert high_n > low_n
     assert more_trials < low_n
+
+
+def test_align_series_drops_missing_and_non_finite():
+    a = {"2024-01-05": 0.01, "2024-01-12": float("nan"), "2024-01-19": 0.02}
+    b = {"2024-01-19": 0.03, "2024-01-05": 0.015}
+    aligned_a, aligned_b = align_series(a, b)
+    assert aligned_a == [0.01, 0.02]
+    assert aligned_b == [0.015, 0.03]

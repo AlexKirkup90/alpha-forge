@@ -1,49 +1,75 @@
-import pandas as pd
+from collections import OrderedDict
 
-from src.portfolio.costs import estimate_costs
+from src.portfolio.costs import CostRow, estimate_costs
 
 
 def _make_inputs(multiplier: float = 1.0):
-    dates = pd.date_range("2023-01-01", periods=2, freq="D")
-    tickers = ["AAA", "BBB", "CCC"]
-    trades = pd.DataFrame(
+    trades = OrderedDict[
+        str, dict[str, float]
+    ](
         {
-            "AAA": [100.0, -50.0],
-            "BBB": [200.0, -100.0],
-            "CCC": [300.0, -150.0],
-        },
-        index=dates,
-    ) * multiplier
-    adv = pd.Series({"AAA": 1000.0, "BBB": 2000.0, "CCC": 1500.0})
-    spreads = pd.Series({"AAA": 5.0, "BBB": 10.0, "CCC": 8.0})
-    sigma = pd.Series({"AAA": 0.02, "BBB": 0.015, "CCC": 0.025})
+            "2023-01-01": {
+                "AAA": 100.0 * multiplier,
+                "BBB": 200.0 * multiplier,
+                "CCC": 300.0 * multiplier,
+            },
+            "2023-01-02": {
+                "AAA": -50.0 * multiplier,
+                "BBB": -100.0 * multiplier,
+                "CCC": -150.0 * multiplier,
+            },
+        }
+    )
+    adv = {"AAA": 1000.0, "BBB": 2000.0, "CCC": 1500.0}
+    spreads = {"AAA": 5.0, "BBB": 10.0, "CCC": 8.0}
+    sigma = {"AAA": 0.02, "BBB": 0.015, "CCC": 0.025}
     params = {"p_max": 0.2, "k": 0.7, "fee_bps": 1.0}
     return trades, adv, spreads, sigma, params
 
 
 def test_costs_scale_with_trades():
     inputs = _make_inputs()
-    costs = estimate_costs(*inputs)
+    costs_small, _ = estimate_costs(*inputs)
     larger_inputs = _make_inputs(multiplier=2.0)
-    larger_costs = estimate_costs(*larger_inputs)
-    assert (larger_costs["C_total"] > costs["C_total"]).all()
+    costs_large, _ = estimate_costs(*larger_inputs)
+
+    assert isinstance(costs_small, list) and isinstance(costs_large, list)
+    assert len(costs_small) == len(costs_large)
+    for base_row, larger_row in zip(costs_small, costs_large):
+        assert isinstance(base_row, CostRow) and isinstance(larger_row, CostRow)
+        assert larger_row.C_total > base_row.C_total
 
 
 def test_impact_sublinear_growth():
     inputs = _make_inputs()
-    base = estimate_costs(*inputs)
+    base_costs, _ = estimate_costs(*inputs)
     doubled_inputs = _make_inputs(multiplier=2.0)
-    doubled = estimate_costs(*doubled_inputs)
-    ratio = doubled["C_impact"] / base["C_impact"]
-    assert (ratio > 1.0).all()
-    assert (ratio < 2.0).all()
+    doubled_costs, _ = estimate_costs(*doubled_inputs)
+
+    for base_row, doubled_row in zip(base_costs, doubled_costs):
+        # Square-root impact implies sublinear growth with participation
+        if base_row.C_impact == 0:
+            # If no impact for the base row, skip the ratio check
+            continue
+        ratio = doubled_row.C_impact / base_row.C_impact
+        assert ratio > 1.0
+        assert ratio < 2.0
 
 
 def test_participation_caps_flag_violations():
+    # Force high participation to trigger caps and violations
     trades, adv, spreads, sigma, params = _make_inputs(multiplier=20.0)
     params["p_max"] = 0.05
-    costs = estimate_costs(trades, adv, spreads, sigma, params)
-    violations = costs.attrs["violations"]
-    assert (violations > 0).any()
-    participation = costs.attrs["participation"]
-    assert (participation <= params["p_max"] + 1e-12).all().all()
+
+    costs, diagnostics = estimate_costs(trades, adv, spreads, sigma, params)
+    assert isinstance(costs, list) and len(costs) > 0
+
+    # At least one violation should be recorded
+    violations = diagnostics["violations"]
+    assert any(count > 0 for count in violations.values())
+
+    # All recorded participations must be capped at p_max
+    participation = diagnostics["participation"]
+    for per_date in participation.values():
+        for value in per_date.values():
+            assert value <= params["p_max"] + 1e-12

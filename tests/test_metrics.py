@@ -2,6 +2,7 @@ import math
 import random
 
 from src.metrics.perf import (
+    align_series,
     alpha_beta,
     annualize_mean_std,
     deflated_sharpe,
@@ -60,3 +61,11 @@ def test_deflated_sharpe_monotonicity():
     more_trials = deflated_sharpe(sr, n=30, m=100)
     assert high_n > low_n
     assert more_trials < low_n
+
+
+def test_align_series_drops_missing_and_non_finite():
+    a = {"2024-01-05": 0.01, "2024-01-12": float("nan"), "2024-01-19": 0.02}
+    b = {"2024-01-19": 0.03, "2024-01-05": 0.015}
+    aligned_a, aligned_b = align_series(a, b)
+    assert aligned_a == [0.01, 0.02]
+    assert aligned_b == [0.015, 0.03]

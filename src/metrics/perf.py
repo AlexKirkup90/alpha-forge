@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import math
-from typing import List, Mapping, Sequence, Tuple, TypeVar
+from typing import Mapping, Sequence, TypeVar
 
 T = TypeVar("T")
 
@@ -11,12 +11,12 @@ def _is_finite(value: float) -> bool:
     return math.isfinite(value)
 
 
-def _to_series(data: Sequence[float] | Mapping[T, float]) -> Tuple[List[T], List[float]]:
+def _to_series(data: Sequence[float] | Mapping[T, float]) -> tuple[list[T], list[float]]:
     if isinstance(data, Mapping):
         keys = list(data.keys())
         values = [float(v) for v in data.values()]
         return keys, values
-    keys_generic: List[T] = list(range(len(data)))  # type: ignore[arg-type]
+    keys_generic: list[T] = list(range(len(data)))  # type: ignore[arg-type]
     values = [float(v) for v in data]
     return keys_generic, values
 
@@ -41,20 +41,20 @@ def align_series(
     a: Sequence[float] | Mapping[T, float],
     b: Sequence[float] | Mapping[T, float],
 ) -> tuple[list[float], list[float]]:
-    """Align two series represented as sequences or mappings."""
+    """Align two return collections by shared keys while dropping non-finite values."""
     keys_a, values_a = _to_series(a)
     keys_b, values_b = _to_series(b)
     lookup_b = {key: value for key, value in zip(keys_b, values_b)}
-    aligned_a: List[float] = []
-    aligned_b: List[float] = []
+    aligned_a: list[float] = []
+    aligned_b: list[float] = []
     for key, value_a in zip(keys_a, values_a):
-        if key not in lookup_b:
+        value_b = lookup_b.get(key)
+        if value_b is None and key not in lookup_b:
             continue
-        value_b = lookup_b[key]
         if not (_is_finite(value_a) and _is_finite(value_b)):
             continue
         aligned_a.append(value_a)
-        aligned_b.append(value_b)
+        aligned_b.append(float(value_b))
     return aligned_a, aligned_b
 
 

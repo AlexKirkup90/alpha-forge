@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
 
 import streamlit as st
 
+from src.engine.weekly import WeeklyParams, run_weekly
 from src.metrics.diagnostics import (
     breadth,
     cross_sectional_ic,
@@ -34,6 +35,38 @@ net = st.sidebar.checkbox("Show Net", value=True)
 if st.sidebar.button("Create demo run"):
     out_path = write_demo_run(data_snapshot_id=snapshot, run_id=run_id or None)
     st.success(f"Demo run created at: {out_path}")
+
+if st.sidebar.button("Run demo weekly"):
+    prices = {
+        "AAA": [10, 11, 12, 13, 14, 15],
+        "BBB": [10, 9, 9.5, 9.7, 9.9, 10.2],
+        "CCC": [5, 5.1, 5.2, 5.3, 5.4, 5.5],
+    }
+    eps = {
+        "AAA": [1, 1, 1, 1.1, 1.2, 1.25],
+        "BBB": [1, 1, 0.98, 0.97, 0.96, 0.95],
+        "CCC": [0.5, 0.5, 0.51, 0.52, 0.53, 0.54],
+    }
+    fundamentals = {
+        "AAA": {"gpm": 0.6, "accruals": 0.1, "leverage": 0.2},
+        "BBB": {"gpm": 0.3, "accruals": 0.2, "leverage": 0.4},
+        "CCC": {"gpm": 0.55, "accruals": 0.12, "leverage": 0.25},
+    }
+    sector = {"AAA": "Tech", "BBB": "Finance", "CCC": "Tech"}
+    next_ret = {"AAA": 0.02, "BBB": -0.01, "CCC": 0.015}
+    bench = {"SPY": 0.008}
+
+    out_path = run_weekly(
+        prices,
+        eps,
+        fundamentals,
+        sector,
+        next_ret,
+        bench,
+        data_snapshot_id=snapshot or "SNAPSHOT_DEMO",
+        params=WeeklyParams(top_k=2),
+    )
+    st.success(f"Weekly demo run created at: {out_path}")
 
 st.subheader("Run Registry")
 

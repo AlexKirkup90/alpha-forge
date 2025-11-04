@@ -4,24 +4,23 @@ version = "0.1.0"
 description = "An autonomous alpha-research lab (features → signals → portfolio → backtest → telemetry → explain)."
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
-# IMPORTANT: tell Poetry what to install as the Python package
-# We intentionally package the 'src' module (imports are like: from src.metrics import perf).
-packages = [
-  { include = "src" }
-]
+packages = [{ include = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+# Widen to accept Streamlit Cloud's Python 3.13.9
+python = ">=3.10,<4.0"
+# Keep runtime light for cloud
+streamlit = "^1.37"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+# Scientific/dev-only stack (used locally or in CI, not required by Streamlit runtime)
 pandas = "^2.0.0"
 numpy = "^1.26"
 scikit-learn = "^1.4"
 statsmodels = "^0.14"
 matplotlib = "^3.8"
 scipy = "^1.11"
-streamlit = "^1.37"
-pyyaml = "^6.0"
-
-[tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
 ruff = "^0.6.0"
 

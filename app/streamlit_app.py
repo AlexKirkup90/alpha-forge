@@ -134,6 +134,87 @@ if st.sidebar.button("Run Multi-Week Demo"):
     st.success(f"Multi-week demo run created at: {out_path}")
     st.json(metrics)
 
+import importlib
+
+
+def _pandas_available():
+    try:
+        importlib.import_module("pandas")
+        return True
+    except Exception:
+        return False
+
+
+st.sidebar.subheader("Backtest Mode")
+mode = st.sidebar.selectbox("Engine", ["Synthetic (Pure-Python)", "CSV (Pandas)"])
+
+if mode == "CSV (Pandas)":
+    st.sidebar.caption("Upload CSVs (prices/eps/funda) — schemas documented in code.")
+    prices_file = st.sidebar.file_uploader("prices.csv", type=["csv"])
+    eps_file = st.sidebar.file_uploader("eps.csv", type=["csv"])
+    funda_file = st.sidebar.file_uploader("funda.csv", type=["csv"])
+    sector_text = st.sidebar.text_area("Sector map (ticker,sector) CSV content (optional)")
+
+    if st.sidebar.button("Run CSV backtest"):
+        if not _pandas_available():
+            st.error("pandas not available on this runtime. Install locally or use Synthetic mode.")
+        elif not (prices_file and eps_file and funda_file):
+            st.warning("Please upload all three CSVs.")
+        else:
+            import csv
+            import io
+            import tempfile
+
+            from src.engine.backtest_pd import run_backtest_pd
+
+            def _write_temp(data: bytes, suffix: str) -> str:
+                tmp = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8")
+                try:
+                    tmp.write(data.decode("utf-8"))
+                    return tmp.name
+                finally:
+                    tmp.close()
+
+            from src.data.adapter import (
+                load_eps_csv,
+                load_fundamentals_csv,
+                load_prices_csv,
+            )
+
+            prices_path = _write_temp(prices_file.getvalue(), "_prices.csv")
+            eps_path = _write_temp(eps_file.getvalue(), "_eps.csv")
+            funda_path = _write_temp(funda_file.getvalue(), "_funda.csv")
+
+            try:
+                prices_by_date = load_prices_csv(prices_path)
+                eps_by_date = load_eps_csv(eps_path)
+                funda_latest = load_fundamentals_csv(funda_path)
+            finally:
+                import os
+
+                for p in (prices_path, eps_path, funda_path):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
+
+            sector_map = {}
+            if sector_text.strip():
+                sector_buf = io.StringIO(sector_text)
+                reader = csv.DictReader(sector_buf)
+                for row in reader:
+                    sector_map[row["ticker"]] = row["sector"]
+
+            out_path = run_backtest_pd(
+                prices_by_date,
+                eps_by_date,
+                funda_latest,
+                sector_map,
+                weeks=52,
+                data_snapshot_id=snapshot or "CSV_SNAPSHOT",
+            )
+            st.success(f"CSV backtest created at: {out_path}")
+
 st.subheader("Run Registry")
 
 with st.expander("🔎 Diagnostics (demo calculation)"):
@@ -165,3 +246,20 @@ if runs_dir.exists():
                 st.divider()
 else:
     st.info("No runs yet. Once backtests write artifacts, they will appear here.")
+
+with st.expander("📈 Equity preview (latest run)"):
+    try:
+        runs_dir = pathlib.Path("runs")
+        candidates = sorted((p for p in runs_dir.glob("*/*") if p.is_dir()))
+        if candidates:
+            latest = candidates[-1]
+            eq_file = latest / "equity.json"
+            if eq_file.exists():
+                series = json.loads(eq_file.read_text(encoding="utf-8"))
+                st.line_chart(series)
+            else:
+                st.info("No equity.json found in latest run.")
+        else:
+            st.info("No runs found.")
+    except Exception as e:
+        st.warning(f"Preview unavailable: {e}")

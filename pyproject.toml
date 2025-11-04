@@ -7,11 +7,14 @@ license = "MIT"
 packages = [{ include = "src" }]
 
 [tool.poetry.dependencies]
+# Widen to accept Streamlit Cloud's Python 3.13.9
 python = ">=3.10,<4.0"
+# Keep runtime light for cloud
 streamlit = "^1.37"
 pyyaml = "^6.0"
 
 [tool.poetry.group.dev.dependencies]
+# Scientific/dev-only stack (used locally or in CI, not required by Streamlit runtime)
 pandas = "^2.0.0"
 numpy = "^1.26"
 scikit-learn = "^1.4"

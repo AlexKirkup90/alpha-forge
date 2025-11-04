@@ -12,6 +12,8 @@ if str(SRC_DIR) not in sys.path:
 
 import streamlit as st
 
+from src.telemetry.demo_run import write_demo_run
+
 st.set_page_config(page_title="alpha-forge", layout="wide")
 st.title("alpha-forge — Backtest Console (Step 1)")
 
@@ -20,6 +22,11 @@ snapshot = st.sidebar.text_input("Data snapshot ID", "SNAPSHOT_DEMO")
 run_id = st.sidebar.text_input("Run ID", datetime.utcnow().strftime("%Y%m%d-%H%M%S"))
 gross = st.sidebar.checkbox("Show Gross", value=True)
 net = st.sidebar.checkbox("Show Net", value=True)
+
+
+if st.sidebar.button("Create demo run"):
+    out_path = write_demo_run(data_snapshot_id=snapshot, run_id=run_id or None)
+    st.success(f"Demo run created at: {out_path}")
 
 st.subheader("Run Registry")
 runs_dir = pathlib.Path("runs")

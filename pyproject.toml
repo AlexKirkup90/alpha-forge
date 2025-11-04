@@ -1,13 +1,30 @@
-[project]
+[tool.poetry]
 name = "alpha-forge"
 version = "0.1.0"
-requires-python = ">=3.10"
-dependencies = []
+description = "An autonomous alpha-research lab (features → signals → portfolio → backtest → telemetry → explain)."
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+packages = [{ include = "src" }]
 
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+streamlit = "^1.37"
+pyyaml = "^6.0"
+
+[tool.poetry.group.dev.dependencies]
+pandas = "^2.0.0"
+numpy = "^1.26"
+scikit-learn = "^1.4"
+statsmodels = "^0.14"
+matplotlib = "^3.8"
+scipy = "^1.11"
+pytest = "^8.0"
+ruff = "^0.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-
-[tool.setuptools.cmdclass]
-bdist_wheel = "wheel.bdist_wheel.bdist_wheel"

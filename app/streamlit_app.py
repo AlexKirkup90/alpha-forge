@@ -161,11 +161,7 @@ if mode == "CSV (Pandas)":
         elif not (prices_file and eps_file and funda_file):
             st.warning("Please upload all three CSVs.")
         else:
-            import csv
-            import io
             import tempfile
-
-            from src.engine.backtest_pd import run_backtest_pd
 
             def _write_temp(data: bytes, suffix: str) -> str:
                 tmp = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False, encoding="utf-8")
@@ -179,41 +175,50 @@ if mode == "CSV (Pandas)":
                 load_eps_csv,
                 load_fundamentals_csv,
                 load_prices_csv,
+                load_sector_map_csv,
             )
 
             prices_path = _write_temp(prices_file.getvalue(), "_prices.csv")
             eps_path = _write_temp(eps_file.getvalue(), "_eps.csv")
             funda_path = _write_temp(funda_file.getvalue(), "_funda.csv")
-
+            sector_path = None
+            out_path = None
             try:
                 prices_by_date = load_prices_csv(prices_path)
                 eps_by_date = load_eps_csv(eps_path)
                 funda_latest = load_fundamentals_csv(funda_path)
+
+                sector_map = {}
+                if sector_text.strip():
+                    sector_path = _write_temp(sector_text.encode("utf-8"), "_sector.csv")
+                    sector_map = load_sector_map_csv(sector_path)
+
+                from src.engine.backtest_pd import run_backtest_pd
+
+                out_path = run_backtest_pd(
+                    prices_by_date,
+                    eps_by_date,
+                    funda_latest,
+                    sector_map,
+                    weeks=52,
+                    data_snapshot_id=snapshot or "CSV_SNAPSHOT",
+                )
+            except ValueError as e:
+                st.error(f"CSV schema problem: {e}")
+            except Exception as e:
+                st.error(f"CSV backtest failed: {e.__class__.__name__}")
+            else:
+                st.success(f"CSV backtest created at: {out_path}")
             finally:
                 import os
 
-                for p in (prices_path, eps_path, funda_path):
+                for p in (prices_path, eps_path, funda_path, sector_path):
+                    if not p:
+                        continue
                     try:
                         os.unlink(p)
                     except OSError:
                         pass
-
-            sector_map = {}
-            if sector_text.strip():
-                sector_buf = io.StringIO(sector_text)
-                reader = csv.DictReader(sector_buf)
-                for row in reader:
-                    sector_map[row["ticker"]] = row["sector"]
-
-            out_path = run_backtest_pd(
-                prices_by_date,
-                eps_by_date,
-                funda_latest,
-                sector_map,
-                weeks=52,
-                data_snapshot_id=snapshot or "CSV_SNAPSHOT",
-            )
-            st.success(f"CSV backtest created at: {out_path}")
 
 st.subheader("Run Registry")
 

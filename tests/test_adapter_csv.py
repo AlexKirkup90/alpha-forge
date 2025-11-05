@@ -6,3 +6,13 @@ def test_pivot_prices_to_ticker_series():
     series = pivot_prices_to_ticker_series(prices)
     assert series["A"] == [10.0, 11.0]
     assert series["B"] == [20.0, 0.0]
+
+
+def test_header_tolerance_and_bom(tmp_path):
+    p = tmp_path / "eps.csv"
+    content = "\ufeffdate,ticker,eps\n2024-01-07,AAA,1.0\n"
+    p.write_text(content, encoding="utf-8")
+    from src.data.adapter import load_eps_csv
+
+    data = load_eps_csv(str(p))
+    assert data["2024-01-07"]["AAA"] == 1.0

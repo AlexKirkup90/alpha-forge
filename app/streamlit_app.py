@@ -213,10 +213,10 @@ if st.sidebar.button("Compute Adaptive Weights"):
     except Exception as e:
         st.error(f"Adaptive weighting failed: {e.__class__.__name__}: {e}")
 
-with st.expander("📑 Factor Tear-Sheet (latest weights)"):
-    import pathlib
-    import json
+You’ve got a duplicated block + a dangling try:. Replace the entire tear-sheet expander with this clean version:
 
+with st.expander("📑 Factor Tear-Sheet (latest weights)"):
+    import pathlib, json
     runs_dir = pathlib.Path("runs")
     candidates = sorted((p for p in runs_dir.glob("*/*/factors/weights") if p.is_dir()))
     if not candidates:
@@ -228,6 +228,8 @@ with st.expander("📑 Factor Tear-Sheet (latest weights)"):
             name: wdir / name
             for name in ["weights.json", "ic_ema.json", "gates.json", "contrib.json", "summary.json"]
         }
+
+        # Summary
         try:
             summary = json.loads(files["summary.json"].read_text(encoding="utf-8"))
             st.subheader("Summary")
@@ -235,52 +237,48 @@ with st.expander("📑 Factor Tear-Sheet (latest weights)"):
         except Exception as e:
             st.warning(f"Could not read summary: {e}")
 
+        # Latest snapshot table
         try:
             import pandas as pd  # type: ignore
 
             weights = json.loads(files["weights.json"].read_text(encoding="utf-8"))
-            ic_ema = json.loads(files["ic_ema.json"].read_text(encoding="utf-8"))
-            gates = json.loads(files["gates.json"].read_text(encoding="utf-8"))
+            ic_ema  = json.loads(files["ic_ema.json"].read_text(encoding="utf-8"))
+            gates   = json.loads(files["gates.json"].read_text(encoding="utf-8"))
             contrib = json.loads(files["contrib.json"].read_text(encoding="utf-8"))
+
             last_date = sorted(weights.keys())[-1]
-# build latest snapshot table
-weights = json.loads(files["weights.json"].read_text(encoding="utf-8"))
-ic_ema  = json.loads(files["ic_ema.json"].read_text(encoding="utf-8"))
-gates   = json.loads(files["gates.json"].read_text(encoding="utf-8"))
-contrib = json.loads(files["contrib.json"].read_text(encoding="utf-8"))
 
-last_date = sorted(weights.keys())[-1]
+            # Default missing gates to 1 for display
+            _g = gates.get(last_date, {}) if isinstance(gates, dict) else {}
+            g_last = {}
+            for k in weights[last_date].keys():
+                v = _g.get(k, 1)
+                try:
+                    g_last[k] = int(v)
+                except Exception:
+                    g_last[k] = 1
 
-# Default missing gates to 1 for display (per-factor)
-_g = gates.get(last_date, {}) if isinstance(gates, dict) else {}
-g_last = {}
-for k in weights[last_date].keys():
-    v = _g.get(k, 1)
-    try:
-        g_last[k] = int(v)
-    except Exception:
-        g_last[k] = 1
-
-df = pd.DataFrame(
-    {
-        "weight": weights[last_date],
-        "ic_ema": ic_ema.get(last_date, {}),
-        "gate": g_last,
-        "weighted_ic": contrib.get(last_date, {}),
-    }
-).T.T
+            df = pd.DataFrame(
+                {
+                    "weight": weights[last_date],
+                    "ic_ema": ic_ema.get(last_date, {}),
+                    "gate": g_last,
                     "weighted_ic": contrib.get(last_date, {}),
                 }
             ).T.T
+
             st.subheader(f"Latest snapshot — {last_date}")
             st.table(df)
         except Exception as e:
             st.warning(f"Could not render latest snapshot: {e}")
 
+        # Downloads
         st.subheader("Downloads")
         for k, p in files.items():
             if p.exists():
                 st.download_button(label=f"Download {k}", data=p.read_bytes(), file_name=k)
+
+This removes the duplicate top-level block, closes both try: sections properly, and uses g_last (gate defaults to 1) so the table never shows blanks.
 
 def _multiweek_demo_batches(weeks: int = 12):
     tickers = ["AAA", "BBB", "CCC"]

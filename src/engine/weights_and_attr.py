@@ -13,6 +13,7 @@ from src.signals.weighting import (
     compute_ic_ema_series,
 )
 
+
 def _safe(x: float) -> float | str:
     """Return a finite float or 'NaN' string; never ±Infinity."""
     try:
@@ -20,6 +21,7 @@ def _safe(x: float) -> float | str:
         return xf if math.isfinite(xf) else "NaN"
     except Exception:
         return "NaN"
+
 
 def run_factor_weighting_and_attr(
     ic_series_by_factor: Dict[str, Dict[str, float]],
@@ -52,24 +54,24 @@ def run_factor_weighting_and_attr(
             for f in factor_names
         }
 
-   summary: Dict[str, dict] = {}
-for f in factor_names:
-    ic_vals = []
-    for d in dates:
-        v = ic_ema[d].get(f)
-        if isinstance(v, (int, float)) and math.isfinite(v):
-            ic_vals.append(float(v))
-    w_vals = [weights_by_date[d].get(f, 0.0) for d in dates]
-    g_vals = [gates.get(d, {}).get(f, 1) for d in dates]
-    c_vals = [contrib_by_date[d].get(f, 0.0) for d in dates]
-    ic_mean = sum(ic_vals) / len(ic_vals) if ic_vals else float("nan")
+    summary: Dict[str, dict] = {}
+    for f in factor_names:
+        ic_vals = []
+        for d in dates:
+            v = ic_ema[d].get(f)
+            if isinstance(v, (int, float)) and math.isfinite(v):
+                ic_vals.append(float(v))
+        w_vals = [weights_by_date[d].get(f, 0.0) for d in dates]
+        g_vals = [gates.get(d, {}).get(f, 1) for d in dates]
+        c_vals = [contrib_by_date[d].get(f, 0.0) for d in dates]
+        ic_mean = sum(ic_vals) / len(ic_vals) if ic_vals else float("nan")
 
-    summary[f] = {
-        "ic_ema_mean": _safe(ic_mean),
-        "avg_weight": _safe(sum(w_vals) / len(w_vals) if w_vals else float("nan")),
-        "avg_gate": _safe(sum(g_vals) / len(g_vals) if g_vals else float("nan")),
-        "avg_contrib": _safe(sum(c_vals) / len(c_vals) if c_vals else float("nan")),
-    }
+        summary[f] = {
+            "ic_ema_mean": _safe(ic_mean),
+            "avg_weight": _safe(sum(w_vals) / len(w_vals) if w_vals else float("nan")),
+            "avg_gate": _safe(sum(g_vals) / len(g_vals) if g_vals else float("nan")),
+            "avg_contrib": _safe(sum(c_vals) / len(c_vals) if c_vals else float("nan")),
+        }
 
     started = datetime.now(timezone.utc).isoformat()
     outdir = Path(runs_dir) / started[:10] / ("weights_" + started.replace(":", "").replace("-", "")[:15])

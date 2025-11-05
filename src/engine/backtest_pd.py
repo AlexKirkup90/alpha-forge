@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import math
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -101,9 +102,11 @@ def run_backtest_pd(
     sr = port_ret_net.mean() / (port_ret_net.std(ddof=1) or float("nan"))
     sharpe = _ann_scale(sr, 52)
     downside = port_ret_net.clip(upper=0.0)
-    sortino = _ann_scale(
-        port_ret_net.mean() / (downside.std(ddof=1) or float("nan")), 52
-    )
+    down_std = float(downside.std(ddof=1)) if len(downside) > 1 else 0.0
+    if down_std == 0.0:
+        sortino = float("inf") if float(port_ret_net.mean()) > 0 else 0.0
+    else:
+        sortino = float(port_ret_net.mean() / down_std * (52 ** 0.5))
     # Alpha/Beta via OLS vs equal-weight benchmark of available names each week (simplistic)
     bench = rets.mean(axis=1)
     cov = port_ret_net.cov(bench)
@@ -115,27 +118,42 @@ def run_backtest_pd(
     dd = (roll_max - equity) / roll_max
     max_dd = float(dd.max()) if not dd.empty else 0.0
     cagr = float(equity.iloc[-1] ** (52 / max(1, len(equity))) - 1.0)
-    turnover = (
-        float(weights.diff().abs().sum(axis=1).mean() / 2.0)
-        if len(weights) > 1
-        else 0.0
-    )
+    # Turnover per period
+    w_diff = weights.diff().abs().sum(axis=1) / 2.0
+    turnover_mean = float(w_diff.mean()) if len(w_diff) else 0.0
+    turnover_median = float(w_diff.median()) if len(w_diff) else 0.0
 
     # Persist
     started = datetime.now(timezone.utc).isoformat()
     rid = uuid.uuid4().hex[:12]
     outdir = Path(runs_dir) / started[:10] / rid
     outdir.mkdir(parents=True, exist_ok=True)
+    
+    def _safe_num(x: float) -> float | str:
+        try:
+            if x is None:
+                return "NaN"
+            value = float(x)
+            if math.isfinite(value):
+                return value
+            if math.isinf(value):
+                return "Infinity" if value > 0 else "-Infinity"
+            return "NaN"
+        except Exception:
+            return "NaN"
+
     metrics = {
-        "Sharpe": float(sharpe) if sharpe == sharpe else float("nan"),
-        "Sortino": float(sortino) if sortino == sortino else float("nan"),
-        "Alpha": float(alpha) if alpha == alpha else float("nan"),
-        "Beta": float(beta) if beta == beta else float("nan"),
-        "CAGR": cagr,
-        "MaxDD": max_dd,
-        "Turnover": turnover,
-        "TerminalEquity": float(equity.iloc[-1]),
+        "Sharpe": _safe_num(sharpe),
+        "Sortino": _safe_num(sortino),
+        "Alpha": _safe_num(alpha),
+        "Beta": _safe_num(beta),
+        "CAGR": _safe_num(cagr),
+        "MaxDD": _safe_num(max_dd),
+        "Turnover_mean": _safe_num(turnover_mean),
+        "Turnover_median": _safe_num(turnover_median),
+        "TerminalEquity": _safe_num(float(equity.iloc[-1]) if len(equity) else float("nan")),
         "TotalWeeks": int(len(equity)),
+        "bench_method": "equal_weight_universe",
     }
     (outdir / "metrics.json").write_text(
         json.dumps(metrics, indent=2), encoding="utf-8"
@@ -145,6 +163,11 @@ def run_backtest_pd(
     )
     (outdir / "equity.json").write_text(
         json.dumps(list(map(float, equity.values)), indent=2), encoding="utf-8"
+    )
+    weights.to_csv(outdir / "weights.csv", index=True)
+    last = weights.iloc[-1].dropna().to_dict() if len(weights) else {}
+    (outdir / "holdings_last.json").write_text(
+        json.dumps(last, indent=2), encoding="utf-8"
     )
     # minimal run.json
     run_meta = {

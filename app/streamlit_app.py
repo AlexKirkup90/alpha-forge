@@ -12,6 +12,11 @@ if str(SRC_DIR) not in sys.path:
 
 import math
 
+try:
+    import pandas as pd  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    pd = None  # type: ignore
+
 import streamlit as st
 
 from src.engine.backtest import WeeklyBatch, run_walkforward
@@ -252,19 +257,92 @@ if runs_dir.exists():
 else:
     st.info("No runs yet. Once backtests write artifacts, they will appear here.")
 
-with st.expander("📈 Equity preview (latest run)"):
-    try:
-        runs_dir = pathlib.Path("runs")
-        candidates = sorted((p for p in runs_dir.glob("*/*") if p.is_dir()))
-        if candidates:
-            latest = candidates[-1]
-            eq_file = latest / "equity.json"
-            if eq_file.exists():
-                series = json.loads(eq_file.read_text(encoding="utf-8"))
-                st.line_chart(series)
+with st.expander("🧪 Run details (latest)"):
+    runs_dir = pathlib.Path("runs")
+    candidates = sorted((p for p in runs_dir.glob("*/*") if p.is_dir()))
+    if not candidates:
+        st.info("No runs available.")
+    else:
+        latest = candidates[-1]
+        st.write(f"Latest run: **{latest.name}** — {latest.parent.name}")
+
+        metrics_data = None
+        mfile = latest / "metrics.json"
+        if mfile.exists():
+            try:
+                metrics_data = json.loads(mfile.read_text(encoding="utf-8"))
+                st.subheader("Metrics")
+                st.json(metrics_data)
+            except Exception as e:
+                st.warning(f"Could not parse metrics.json: {e}")
+
+        def _as_float(x):
+            try:
+                return float(x)
+            except Exception:
+                return float("nan")
+
+        if metrics_data:
+            sortino_val = _as_float(metrics_data.get("Sortino", "NaN"))
+            maxdd = _as_float(metrics_data.get("MaxDD", "NaN"))
+            tmean = _as_float(metrics_data.get("Turnover_mean", "NaN"))
+            flags = []
+            if maxdd == 0.0:
+                flags.append("MaxDD is 0 (toy/synthetic data often produces this).")
+            if not math.isfinite(sortino_val):
+                flags.append("Sortino is non-finite (no downside returns).")
+            if tmean == 0.0:
+                flags.append("Turnover is 0 (weights likely unchanged).")
+            if flags:
+                st.warning(" • ".join(flags))
+
+        eq_file = latest / "equity.json"
+        if eq_file.exists():
+            try:
+                eq = json.loads(eq_file.read_text(encoding="utf-8"))
+                st.subheader("Equity")
+                st.line_chart(eq)
+            except Exception as e:
+                st.warning(f"Could not parse equity.json: {e}")
+
+        wfile = latest / "weights.csv"
+        if wfile.exists():
+            if pd is None:
+                st.info("Install pandas to view turnover diagnostics.")
             else:
-                st.info("No equity.json found in latest run.")
-        else:
-            st.info("No runs found.")
-    except Exception as e:
-        st.warning(f"Preview unavailable: {e}")
+                try:
+                    wdf = pd.read_csv(wfile, index_col=0)
+                    if len(wdf) > 1:
+                        t_series = (wdf.diff().abs().sum(axis=1) / 2.0).fillna(0.0)
+                        st.subheader("Turnover per period")
+                        st.line_chart(t_series.values.tolist())
+                except Exception as e:
+                    st.warning(f"Could not compute turnover from weights.csv: {e}")
+
+        hfile = latest / "holdings_last.json"
+        if hfile.exists():
+            try:
+                hold = json.loads(hfile.read_text(encoding="utf-8"))
+                st.subheader("Final holdings")
+                if hold:
+                    if pd is not None:
+                        holdings_df = pd.DataFrame(
+                            list(hold.items()), columns=["Ticker", "weight"]
+                        ).set_index("Ticker")
+                        st.table(holdings_df)
+                    else:
+                        st.json(hold)
+                else:
+                    st.caption("Empty holdings.")
+            except Exception as e:
+                st.warning(f"Could not parse holdings_last.json: {e}")
+
+        st.subheader("Downloads")
+        for fname in ("metrics.json", "returns.json", "equity.json", "weights.csv", "holdings_last.json"):
+            fp = latest / fname
+            if fp.exists():
+                st.download_button(
+                    label=f"Download {fname}",
+                    data=fp.read_bytes(),
+                    file_name=fname,
+                )

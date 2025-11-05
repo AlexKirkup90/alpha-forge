@@ -103,6 +103,85 @@ if st.sidebar.button("Run Snapshot Backtest") and snaps:
     except Exception as e:
         st.error(f"Snapshot backtest failed: {e.__class__.__name__}: {e}")
 
+st.sidebar.header("📊 Factor Telemetry")
+tele_disabled = pd is None
+if tele_disabled:
+    st.sidebar.warning("pandas not available; factor telemetry disabled.")
+tele_snapshot = st.sidebar.selectbox(
+    "Snapshot for telemetry",
+    list_snapshots() or ["(none)"],
+    disabled=tele_disabled,
+)
+available_factors = [
+    "mom_12_1",
+    "mom_velocity",
+    "eps_rev_4_12",
+    "quality_q",
+    "low_vol_26w",
+]
+selected_factors = st.sidebar.multiselect(
+    "Select factors",
+    available_factors,
+    default=["mom_12_1", "eps_rev_4_12"],
+    disabled=tele_disabled,
+)
+
+if st.sidebar.button("Run Factor IC", disabled=tele_disabled):
+    try:
+        from src.engine.factor_telemetry import run_factor_ic_telemetry
+
+        if tele_snapshot == "(none)":
+            st.warning("No snapshots available. Build or load a snapshot first.")
+        else:
+            pb, eb, fb, sm = load_snapshot(tele_snapshot)
+            out_path = run_factor_ic_telemetry(
+                pb,
+                eb,
+                fb,
+                selected_factors,
+                data_snapshot_id=tele_snapshot.split("/")[-1],
+            )
+            st.success(f"Factor telemetry created at: {out_path}")
+    except ImportError:
+        st.error("pandas/scipy not available for factor telemetry.")
+    except Exception as e:
+        st.error(f"Factor telemetry failed: {e.__class__.__name__}: {e}")
+
+with st.expander("📈 Factor IC (latest run)"):
+    try:
+        import json
+        import pathlib
+
+        import pandas as pd  # type: ignore
+
+        runs_dir = pathlib.Path("runs")
+        candidates = sorted((p for p in runs_dir.glob("*/*/factors") if p.is_dir()))
+        if not candidates:
+            st.info("No factor runs yet.")
+        else:
+            froot = candidates[-1]
+            st.caption(f"Latest factor artifacts: {froot}")
+            fdirs = sorted([d for d in froot.iterdir() if d.is_dir()])
+            tabs = st.tabs([d.name for d in fdirs] or ["(none)"])
+            for tab, d in zip(tabs, fdirs):
+                with tab:
+                    ic_file = d / "ic_series.json"
+                    sum_file = d / "ic_summary.json"
+                    if ic_file.exists():
+                        ser = json.loads(ic_file.read_text(encoding="utf-8"))
+                        series = pd.Series(
+                            {
+                                k: (float(v) if v not in ("NaN", "Infinity", "-Infinity") else float("nan"))
+                                for k, v in ser.items()
+                            }
+                        )
+                        st.line_chart(series)
+                    if sum_file.exists():
+                        summary = json.loads(sum_file.read_text(encoding="utf-8"))
+                        st.json(summary)
+    except Exception as e:
+        st.warning(f"Could not render factor IC preview: {e}")
+
 def _multiweek_demo_batches(weeks: int = 12):
     tickers = ["AAA", "BBB", "CCC"]
     sector_map = {"AAA": "Tech", "BBB": "Finance", "CCC": "Health"}

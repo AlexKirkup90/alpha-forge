@@ -243,12 +243,32 @@ with st.expander("📑 Factor Tear-Sheet (latest weights)"):
             gates = json.loads(files["gates.json"].read_text(encoding="utf-8"))
             contrib = json.loads(files["contrib.json"].read_text(encoding="utf-8"))
             last_date = sorted(weights.keys())[-1]
-            g_last = {k: (gates.get(last_date, {}).get(k, 1) or 0) for k in weights[last_date].keys()}
-            df = pd.DataFrame(
-                {
-                    "weight": weights[last_date],
-                    "ic_ema": ic_ema.get(last_date, {}),
-                    "gate": g_last,
+# build latest snapshot table
+weights = json.loads(files["weights.json"].read_text(encoding="utf-8"))
+ic_ema  = json.loads(files["ic_ema.json"].read_text(encoding="utf-8"))
+gates   = json.loads(files["gates.json"].read_text(encoding="utf-8"))
+contrib = json.loads(files["contrib.json"].read_text(encoding="utf-8"))
+
+last_date = sorted(weights.keys())[-1]
+
+# Default missing gates to 1 for display (per-factor)
+_g = gates.get(last_date, {}) if isinstance(gates, dict) else {}
+g_last = {}
+for k in weights[last_date].keys():
+    v = _g.get(k, 1)
+    try:
+        g_last[k] = int(v)
+    except Exception:
+        g_last[k] = 1
+
+df = pd.DataFrame(
+    {
+        "weight": weights[last_date],
+        "ic_ema": ic_ema.get(last_date, {}),
+        "gate": g_last,
+        "weighted_ic": contrib.get(last_date, {}),
+    }
+).T.T
                     "weighted_ic": contrib.get(last_date, {}),
                 }
             ).T.T

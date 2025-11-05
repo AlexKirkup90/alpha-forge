@@ -44,6 +44,65 @@ if st.sidebar.button("Create demo run"):
     out_path = write_demo_run(data_snapshot_id=snapshot, run_id=run_id or None)
     st.success(f"Demo run created at: {out_path}")
 
+st.sidebar.header("Live Data (Phase 4)")
+tickers_text = st.sidebar.text_input("Tickers (comma-separated)", "AAPL,MSFT,GOOGL")
+provider_choice = st.sidebar.selectbox("Provider", ["yfinance (no key)", "Polygon (API key)"])
+
+# Build Snapshot
+if st.sidebar.button("Build Snapshot"):
+    T = [t.strip().upper() for t in tickers_text.split(",") if t.strip()]
+    try:
+        if provider_choice.startswith("yfinance"):
+            from src.data.providers.yf_provider import YFinanceProvider
+
+            prov = YFinanceProvider()
+        else:
+            from src.data.providers.polygon_provider import PolygonProvider
+
+            prov = PolygonProvider()
+
+        prices_by_date = prov.fetch_prices_weekly(T, lookback_weeks=156)
+        eps_by_date = prov.fetch_eps_weekly(T, lookback_weeks=156)
+        fundamentals_latest = prov.fetch_fundamentals_latest(T)
+        sector_map = prov.fetch_sector_map(T)
+
+        from src.data.snapshot import write_snapshot
+
+        snap_path = write_snapshot(
+            prices_by_date, eps_by_date, fundamentals_latest, sector_map
+        )
+        st.success(f"Snapshot written: {snap_path}")
+    except ImportError as e:
+        st.error(f"Provider not available: {e}")
+    except NotImplementedError as e:
+        st.warning(f"Provider feature not implemented: {e}")
+    except Exception as e:
+        st.error(f"Snapshot build failed: {e.__class__.__name__}: {e}")
+
+# Run Snapshot Backtest
+from src.data.snapshot import list_snapshots, load_snapshot
+
+snaps = list_snapshots()
+snap_sel = st.sidebar.selectbox("Use Snapshot", snaps if snaps else ["(none)"])
+if st.sidebar.button("Run Snapshot Backtest") and snaps:
+    try:
+        from src.engine.backtest_pd import run_backtest_pd
+
+        pb, eb, fb, sm = load_snapshot(snap_sel)
+        out_path = run_backtest_pd(
+            pb,
+            eb,
+            fb,
+            sm,
+            weeks=52,
+            data_snapshot_id=snapshot or "SNAPSHOT_LIVE",
+        )
+        st.success(f"Snapshot backtest created at: {out_path}")
+    except ImportError:
+        st.error("pandas not available on this runtime.")
+    except Exception as e:
+        st.error(f"Snapshot backtest failed: {e.__class__.__name__}: {e}")
+
 def _multiweek_demo_batches(weeks: int = 12):
     tickers = ["AAA", "BBB", "CCC"]
     sector_map = {"AAA": "Tech", "BBB": "Finance", "CCC": "Health"}

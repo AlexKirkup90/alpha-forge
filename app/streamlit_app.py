@@ -276,8 +276,6 @@ with st.expander("📑 Factor Tear-Sheet (latest weights)"):
             if p.exists():
                 st.download_button(label=f"Download {k}", data=p.read_bytes(), file_name=k)
 
-This removes the duplicate top-level block, closes both try: sections properly, and uses g_last (gate defaults to 1) so the table never shows blanks.
-
 def _multiweek_demo_batches(weeks: int = 12):
     tickers = ["AAA", "BBB", "CCC"]
     sector_map = {"AAA": "Tech", "BBB": "Finance", "CCC": "Health"}

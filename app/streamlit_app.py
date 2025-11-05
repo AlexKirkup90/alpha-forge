@@ -182,6 +182,86 @@ with st.expander("📈 Factor IC (latest run)"):
     except Exception as e:
         st.warning(f"Could not render factor IC preview: {e}")
 
+st.sidebar.header("🧮 Adaptive Weights")
+alpha_ic = st.sidebar.slider(
+    "IC-EMA alpha (0.05–0.5)", min_value=0.05, max_value=0.5, value=0.2, step=0.05
+)
+factors_for_weights = st.sidebar.multiselect(
+    "Factors to weight",
+    ["mom_12_1", "mom_velocity", "eps_rev_4_12", "quality_q", "low_vol_26w"],
+    default=["mom_12_1", "mom_velocity", "quality_q", "low_vol_26w"],
+)
+
+if st.sidebar.button("Compute Adaptive Weights"):
+    try:
+        from src.engine.load_ic_artifacts import load_latest_ic_series
+        from src.engine.weights_and_attr import run_factor_weighting_and_attr
+
+        ic_by_factor = load_latest_ic_series(factor_names=factors_for_weights)
+        if not ic_by_factor:
+            st.warning("No factor IC artifacts found. Run Factor IC first.")
+        else:
+            bench = {}
+            out_dir = run_factor_weighting_and_attr(
+                ic_series_by_factor=ic_by_factor,
+                bench_weekly_returns=bench,
+                factor_names=factors_for_weights,
+                data_snapshot_id=snapshot or "SNAPSHOT",
+                alpha=alpha_ic,
+            )
+            st.success(f"Adaptive weights created at: {out_dir}")
+    except Exception as e:
+        st.error(f"Adaptive weighting failed: {e.__class__.__name__}: {e}")
+
+with st.expander("📑 Factor Tear-Sheet (latest weights)"):
+    import pathlib
+    import json
+
+    runs_dir = pathlib.Path("runs")
+    candidates = sorted((p for p in runs_dir.glob("*/*/factors/weights") if p.is_dir()))
+    if not candidates:
+        st.info("No adaptive weights runs yet.")
+    else:
+        wdir = candidates[-1]
+        st.caption(f"Artifacts: {wdir}")
+        files = {
+            name: wdir / name
+            for name in ["weights.json", "ic_ema.json", "gates.json", "contrib.json", "summary.json"]
+        }
+        try:
+            summary = json.loads(files["summary.json"].read_text(encoding="utf-8"))
+            st.subheader("Summary")
+            st.json(summary)
+        except Exception as e:
+            st.warning(f"Could not read summary: {e}")
+
+        try:
+            import pandas as pd  # type: ignore
+
+            weights = json.loads(files["weights.json"].read_text(encoding="utf-8"))
+            ic_ema = json.loads(files["ic_ema.json"].read_text(encoding="utf-8"))
+            gates = json.loads(files["gates.json"].read_text(encoding="utf-8"))
+            contrib = json.loads(files["contrib.json"].read_text(encoding="utf-8"))
+            last_date = sorted(weights.keys())[-1]
+            g_last = {k: (gates.get(last_date, {}).get(k, 1) or 0) for k in weights[last_date].keys()}
+            df = pd.DataFrame(
+                {
+                    "weight": weights[last_date],
+                    "ic_ema": ic_ema.get(last_date, {}),
+                    "gate": g_last,
+                    "weighted_ic": contrib.get(last_date, {}),
+                }
+            ).T.T
+            st.subheader(f"Latest snapshot — {last_date}")
+            st.table(df)
+        except Exception as e:
+            st.warning(f"Could not render latest snapshot: {e}")
+
+        st.subheader("Downloads")
+        for k, p in files.items():
+            if p.exists():
+                st.download_button(label=f"Download {k}", data=p.read_bytes(), file_name=k)
+
 def _multiweek_demo_batches(weeks: int = 12):
     tickers = ["AAA", "BBB", "CCC"]
     sector_map = {"AAA": "Tech", "BBB": "Finance", "CCC": "Health"}

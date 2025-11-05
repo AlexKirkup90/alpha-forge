@@ -213,8 +213,6 @@ if st.sidebar.button("Compute Adaptive Weights"):
     except Exception as e:
         st.error(f"Adaptive weighting failed: {e.__class__.__name__}: {e}")
 
-You’ve got a duplicated block + a dangling try:. Replace the entire tear-sheet expander with this clean version:
-
 with st.expander("📑 Factor Tear-Sheet (latest weights)"):
     import pathlib, json
     runs_dir = pathlib.Path("runs")

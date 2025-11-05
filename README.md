@@ -9,6 +9,6 @@
 
 ## Quickstart
 ```bash
-pip install -e .
+SETUPTOOLS_ENABLE_FEATURES=legacy-editable pip install -e .[providers] --no-build-isolation --no-deps
 streamlit run app/streamlit_app.py
 ```

@@ -12,6 +12,11 @@ python = ">=3.10,<4.0"
 # Keep runtime light for cloud
 streamlit = "^1.37"
 pyyaml = "^6.0"
+yfinance = "^0.2.40"
+"pandas-datareader" = "^0.10.0"
+
+[tool.poetry.extras]
+providers = ["yfinance", "pandas-datareader"]
 
 [tool.poetry.group.dev.dependencies]
 # Scientific/dev-only stack (used locally or in CI, not required by Streamlit runtime)

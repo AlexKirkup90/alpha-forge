@@ -36,7 +36,7 @@ def ic_series(scores: pd.DataFrame, next_returns: pd.DataFrame) -> pd.Series:
         s = S.loc[d]
         r = R.loc[d]
         m = s.notna() & r.notna()
-        if m.sum() < 3:
+        if m.sum() < 2:
             vals.append(np.nan)
             continue
         rho, _ = spearmanr(s[m], r[m])
